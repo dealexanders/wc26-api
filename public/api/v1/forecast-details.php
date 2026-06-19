@@ -28,6 +28,27 @@ if ($matchId === false || $matchId === null || $matchId <= 0) {
     ], 422);
 }
 
+function getScoreTierLabel(?int $points): string
+{
+    if ($points === null) {
+        return 'Not scored yet';
+    }
+
+    return match ($points) {
+        9 => 'Perfect hit',
+        8 => 'Almost perfect',
+        7 => 'Excellent',
+        6 => 'Outcome hit',
+        5 => 'Good read',
+        4 => 'Close',
+        3 => 'Partial',
+        2 => 'Weak partial',
+        1 => 'One detail',
+        0 => 'Miss',
+        default => 'Unknown tier',
+    };
+}
+
 $statement = $pdo->prepare(
     '
     SELECT
@@ -38,16 +59,23 @@ $statement = $pdo->prepare(
 
         u.username,
         u.first_name,
-        u.last_name
+        u.last_name,
+
+        fs.points_total
 
     FROM votes v
 
     JOIN telegram_users u
         ON u.id = v.user_id
 
+    LEFT JOIN forecast_scores fs
+        ON fs.vote_id = v.id
+
     WHERE v.match_id = :match_id
 
-    ORDER BY v.updated_at ASC
+    ORDER BY
+        fs.points_total DESC,
+        v.updated_at ASC
     '
 );
 
@@ -67,6 +95,10 @@ $forecasts = array_map(
                 . ($row['last_name'] ?? '')
             );
 
+        $points = $row['points_total'] === null
+            ? null
+            : (int) $row['points_total'];
+
         return [
             'voter_name' =>
                 maskName($rawName),
@@ -79,6 +111,15 @@ $forecasts = array_map(
 
             'outcome' =>
                 $row['outcome'],
+
+            'points' =>
+                $points,
+
+            'tier' =>
+                $points,
+
+            'tier_label' =>
+                getScoreTierLabel($points),
         ];
     },
     $rows
